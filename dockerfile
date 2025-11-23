@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     libonig-dev \
     libxml2-dev \
+    libmagickwand-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions required by PipraPay
@@ -27,6 +28,10 @@ RUN docker-php-ext-install \
     fileinfo \
     mbstring \
     zip
+
+# Install Imagick via PECL
+RUN pecl install imagick && \
+    docker-php-ext-enable imagick
 
 # Install IonCube Loader for PHP 8.1
 RUN cd /tmp && \
