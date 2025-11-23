@@ -37,9 +37,6 @@ RUN cd /tmp && \
     echo "zend_extension=ioncube_loader_lin_8.1.so" > /usr/local/etc/php/conf.d/00-ioncube.ini && \
     rm -rf /tmp/ioncube.tar.gz /tmp/ioncube
 
-# Enable cURL (usually enabled by default, but ensure it's there)
-RUN docker-php-ext-install curl
-
 # Set working directory
 WORKDIR /app
 
