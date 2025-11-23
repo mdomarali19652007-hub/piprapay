@@ -29,18 +29,16 @@ RUN docker-php-ext-install \
     zip
 
 # Install IonCube Loader for PHP 8.1
-RUN cd /tmp \
-    && curl -o ioncube.tar.gz https://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_x86-64.tar.gz \
-    && tar -xzf ioncube.tar.gz \
-    && PHP_EXT_DIR=$(php -i | grep extension_dir | awk '{print $3}') \
-    && cp ioncube/ioncube_loader_lin_8.1.so $PHP_EXT_DIR \
-    && echo "zend_extension=ioncube_loader_lin_8.1.so" > /usr/local/etc/php/conf.d/00-ioncube.ini \
-    && rm -rf /tmp/ioncube*
+RUN cd /tmp && \
+    curl -fsSL -o ioncube.tar.gz https://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_x86-64.tar.gz && \
+    tar -xzf ioncube.tar.gz && \
+    PHP_EXT_DIR=$(php-config --extension-dir) && \
+    cp ioncube/ioncube_loader_lin_8.1.so ${PHP_EXT_DIR}/ioncube_loader_lin_8.1.so && \
+    echo "zend_extension=ioncube_loader_lin_8.1.so" > /usr/local/etc/php/conf.d/00-ioncube.ini && \
+    rm -rf /tmp/ioncube.tar.gz /tmp/ioncube
 
 # Enable cURL (usually enabled by default, but ensure it's there)
-RUN apt-get update && apt-get install -y libcurl4-openssl-dev \
-    && docker-php-ext-install curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN docker-php-ext-install curl
 
 # Set working directory
 WORKDIR /app
