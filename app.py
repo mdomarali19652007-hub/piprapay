@@ -5,7 +5,7 @@ import requests
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PHP_PORT = 8000
-REPO_URL = "https://github.com/username/repository.git"  # change this
+REPO_URL = "https://github.com/ShovonSheikh/PipraPay.git"  # change this
 PROJECT_FOLDER = "project"
 
 
