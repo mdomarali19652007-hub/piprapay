@@ -1,9 +1,10 @@
-# Use an official PHP + Python base
+# Use PHP 8.1 CLI as base
 FROM php:8.1-cli
 
-# Install Python 3 and pip
+# Install Python3, venv, git, curl
 RUN apt-get update && apt-get install -y \
     python3 \
+    python3-venv \
     python3-pip \
     git \
     curl \
@@ -15,12 +16,17 @@ WORKDIR /app
 # Copy project files
 COPY . /app
 
-# Install Python dependencies
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Create a virtual environment
+RUN python3 -m venv /app/venv
+
+# Activate venv and install Python dependencies
+RUN /app/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # Expose ports
-# 80 for Python (Render will use $PORT), 8000 for PHP internal
 EXPOSE 80 8000
 
-# Run your Python app
+# Set PATH to use venv pip/python
+ENV PATH="/app/venv/bin:$PATH"
+
+# Run Python app
 CMD ["python3", "app.py"]
