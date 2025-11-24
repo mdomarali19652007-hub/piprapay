@@ -74,7 +74,11 @@ def start_mysql():
     # Start MySQL server in background
     print(f"Starting MySQL server on port {MYSQL_PORT}...", flush=True)
     mysql_process = subprocess.Popen(
-        ["mysqld", "--user=mysql", "--datadir=/var/lib/mysql"],
+        ["mysqld", 
+         "--user=mysql", 
+         "--datadir=/var/lib/mysql",
+         "--socket=/var/run/mysqld/mysqld.sock",
+         "--pid-file=/var/run/mysqld/mysqld.pid"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
@@ -118,8 +122,9 @@ def start_mysql():
     print("=" * 60, flush=True)
     print("🗄️  MYSQL DATABASE CONNECTION DETAILS", flush=True)
     print("=" * 60, flush=True)
-    print(f"Host:          localhost", flush=True)
+    print(f"Host:          localhost (or 127.0.0.1)", flush=True)
     print(f"Port:          {MYSQL_PORT}", flush=True)
+    print(f"Socket:        /var/run/mysqld/mysqld.sock", flush=True)
     print(f"Database:      {database}", flush=True)
     print(f"Username:      {user}", flush=True)
     print(f"Password:      {password}", flush=True)
@@ -127,6 +132,7 @@ def start_mysql():
     print("=" * 60, flush=True)
     print("", flush=True)
     print("💡 Use these credentials to configure your PipraPay application", flush=True)
+    print("💡 PHP will automatically use the socket file for 'localhost'", flush=True)
     print("", flush=True)
 
 
