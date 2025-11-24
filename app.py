@@ -3,6 +3,8 @@ import subprocess
 import threading
 import requests
 import time
+import socket
+import ssl
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ==========================================
@@ -66,21 +68,43 @@ def set_permissions():
         if os.path.exists(directory):
             os.system(f"chmod -R 777 {directory}")
 
+def test_tidb_connection():
+    """Directly test if Python can reach TiDB before starting socat"""
+    print(f"\n🔍 Testing Direct Connection to {TIDB_HOST}:{TIDB_PORT}...", flush=True)
+    try:
+        # Create a raw socket
+        sock = socket.create_connection((TIDB_HOST, int(TIDB_PORT)), timeout=5)
+        
+        # Wrap it in SSL
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        ssock = context.wrap_socket(sock, server_hostname=TIDB_HOST)
+        
+        print("✅ Direct Connection SUCCESS! Network is good.", flush=True)
+        ssock.close()
+        return True
+    except Exception as e:
+        print(f"❌ Direct Connection FAILED: {str(e)}", flush=True)
+        print("   -> Check your Firewall or Credentials.", flush=True)
+        return False
+
 def start_db_proxy():
-    """Start socat to tunnel traffic to TiDB with SSL"""
+    """Start socat with TLS1.2 enforcement"""
     print(f"=== Starting Database Proxy ===", flush=True)
     
-    # Fix: Added 'sni={TIDB_HOST}' and 'verify=0'
-    # 'sni' tells TiDB which cluster we want (Required for Cloud)
-    # 'verify=0' ignores certificate errors temporarily to fix the handshake loop
+    # Updated command:
+    # 1. TCP4-LISTEN: Forces IPv4 (prevents binding issues)
+    # 2. reuseaddr: Allows port reuse if script restarts
+    # 3. method=TLS1.2: Forces the correct encryption protocol for TiDB
     cmd = [
         "socat",
-        "-d", "-d", # Enable verbose logging to see what happens
-        "TCP-LISTEN:3306,fork,bind=127.0.0.1",
-        f"OPENSSL:{TIDB_HOST}:{TIDB_PORT},verify=0,sni={TIDB_HOST}"
+        "-d", "-d", # Verbose logging
+        "TCP4-LISTEN:3306,fork,reuseaddr,bind=127.0.0.1",
+        f"OPENSSL:{TIDB_HOST}:{TIDB_PORT},verify=0,sni={TIDB_HOST},method=TLS1.2"
     ]
     
-    print(f"🔗 Creating SSL Tunnel to {TIDB_HOST}...", flush=True)
+    print(f"🔗 Creating SSL Tunnel...", flush=True)
     subprocess.Popen(cmd)
     
     time.sleep(2)
@@ -98,25 +122,29 @@ def start_php():
 
 def main():
     print("=" * 60, flush=True)
-    print("=== PipraPay Deployment (SSL Proxy Mode) ===", flush=True)
+    print("=== PipraPay Deployment (v3 Fix) ===", flush=True)
     print("=" * 60, flush=True)
     
-    # Clone project
+    # 1. Test Network First
+    if not test_tidb_connection():
+        print("⚠️ WARNING: TiDB seems unreachable. Proxy might fail.")
+    
+    # 2. Clone project
     if not os.path.exists(PROJECT_FOLDER):
         print(f"Cloning repository...", flush=True)
         os.system(f"git clone {REPO_URL} {PROJECT_FOLDER}")
     
     set_permissions()
     
-    # 1. Start the SSL Proxy
+    # 3. Start the SSL Proxy
     start_db_proxy()
     
-    # 2. Start PHP
+    # 4. Start PHP
     threading.Thread(target=start_php, daemon=True).start()
     time.sleep(2)
 
     print("\n" + "=" * 60)
-    print("📋 INSTALLER CONFIGURATION (Use These Exact Values)")
+    print("📋 INSTALLER CONFIGURATION")
     print("=" * 60)
     print(f"Database Host:     127.0.0.1")
     print(f"Database Port:     3306")
