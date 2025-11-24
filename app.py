@@ -55,7 +55,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def start_mysql():
     """Initialize and start MySQL server"""
-    print("=== Starting MySQL Database ===")
+    print("=== Starting MySQL Database ===", flush=True)
     
     # Get environment variables
     root_password = os.getenv("MYSQL_ROOT_PASSWORD", "R00t@Pipra2024!Secure#DB")
@@ -63,39 +63,41 @@ def start_mysql():
     user = os.getenv("MYSQL_USER", "piprapay_user")
     password = os.getenv("MYSQL_PASSWORD", "Pipra@Pay2024!Str0ng#Pass")
     
+    print(f"Database: {database}, User: {user}", flush=True)
+    
     # Initialize MySQL data directory if not exists
     if not os.path.exists("/var/lib/mysql/mysql"):
-        print("Initializing MySQL data directory...")
+        print("Initializing MySQL data directory...", flush=True)
         os.system("mysqld --initialize-insecure --user=mysql --datadir=/var/lib/mysql")
-        print("✓ MySQL initialized")
+        print("✓ MySQL initialized", flush=True)
     
     # Start MySQL server in background
-    print(f"Starting MySQL server on port {MYSQL_PORT}...")
+    print(f"Starting MySQL server on port {MYSQL_PORT}...", flush=True)
     mysql_process = subprocess.Popen(
         ["mysqld", "--user=mysql", "--datadir=/var/lib/mysql"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    print(f"✓ MySQL server started (PID: {mysql_process.pid})")
+    print(f"✓ MySQL server started (PID: {mysql_process.pid})", flush=True)
     
     # Wait for MySQL to be ready
-    print("Waiting for MySQL to be ready...")
+    print("Waiting for MySQL to be ready...", flush=True)
     max_attempts = 30
     for i in range(max_attempts):
         result = os.system("mysqladmin ping -h localhost --silent")
         if result == 0:
-            print("✓ MySQL is ready!")
+            print("✓ MySQL is ready!", flush=True)
             break
         time.sleep(1)
         if i == max_attempts - 1:
-            print("✗ MySQL failed to start properly")
+            print("✗ MySQL failed to start properly", flush=True)
             return
     
     # Set root password and create database/user
-    print("Configuring MySQL database...")
+    print("Configuring MySQL database...", flush=True)
     
     # First, set root password (no password needed initially after --initialize-insecure)
-    os.system(f"mysql -u root -e \"ALTER USER 'root'@'localhost' IDENTIFIED BY '{root_password}';\"")
+    os.system(f"mysql -u root -e \"ALTER USER 'root'@'localhost' IDENTIFIED BY '{root_password}';\" 2>/dev/null")
     
     # Now use the root password for subsequent commands
     commands = [
@@ -108,29 +110,29 @@ def start_mysql():
     ]
     
     for cmd in commands:
-        os.system(f'mysql -u root -p"{root_password}" -e "{cmd}"')
+        os.system(f'mysql -u root -p"{root_password}" -e "{cmd}" 2>/dev/null')
     
-    print(f"✓ Database '{database}' created")
-    print(f"✓ User '{user}' created with all privileges")
-    print()
-    print("=" * 60)
-    print("🗄️  MYSQL DATABASE CONNECTION DETAILS")
-    print("=" * 60)
-    print(f"Host:          localhost")
-    print(f"Port:          {MYSQL_PORT}")
-    print(f"Database:      {database}")
-    print(f"Username:      {user}")
-    print(f"Password:      {password}")
-    print(f"Root Password: {root_password}")
-    print("=" * 60)
-    print()
-    print("💡 Use these credentials to configure your PipraPay application")
-    print()
+    print(f"✓ Database '{database}' created", flush=True)
+    print(f"✓ User '{user}' created with all privileges", flush=True)
+    print("", flush=True)
+    print("=" * 60, flush=True)
+    print("🗄️  MYSQL DATABASE CONNECTION DETAILS", flush=True)
+    print("=" * 60, flush=True)
+    print(f"Host:          localhost", flush=True)
+    print(f"Port:          {MYSQL_PORT}", flush=True)
+    print(f"Database:      {database}", flush=True)
+    print(f"Username:      {user}", flush=True)
+    print(f"Password:      {password}", flush=True)
+    print(f"Root Password: {root_password}", flush=True)
+    print("=" * 60, flush=True)
+    print("", flush=True)
+    print("💡 Use these credentials to configure your PipraPay application", flush=True)
+    print("", flush=True)
 
 
 def set_permissions():
     """Set proper file permissions for PipraPay directories"""
-    print("Setting file permissions...")
+    print("Setting file permissions...", flush=True)
     
     directories = [
         f"{PROJECT_FOLDER}/invoice",
@@ -142,14 +144,14 @@ def set_permissions():
     for directory in directories:
         if os.path.exists(directory):
             os.system(f"chmod -R 777 {directory}")
-            print(f"✓ Set permissions for {directory}")
+            print(f"✓ Set permissions for {directory}", flush=True)
         else:
-            print(f"⚠ Directory not found: {directory}")
+            print(f"⚠ Directory not found: {directory}", flush=True)
 
 
 def start_php():
     """Start PHP built-in server"""
-    print(f"Starting PHP server on port {PHP_PORT}...")
+    print(f"Starting PHP server on port {PHP_PORT}...", flush=True)
     os.chdir(PROJECT_FOLDER)
     
     # Start PHP with error logging
@@ -159,26 +161,29 @@ def start_php():
         stderr=subprocess.PIPE
     )
     
-    print(f"✓ PHP server started (PID: {process.pid})")
+    print(f"✓ PHP server started (PID: {process.pid})", flush=True)
 
 
 def main():
-    print("=== PipraPay Deployment Starting ===")
+    print("=" * 60, flush=True)
+    print("=== PipraPay Deployment Starting ===", flush=True)
+    print("=" * 60, flush=True)
+    print("", flush=True)
     
     # Start MySQL first
     start_mysql()
     
     # Clone project if not exists
     if not os.path.exists(PROJECT_FOLDER):
-        print(f"Cloning repository from {REPO_URL}...")
+        print(f"Cloning repository from {REPO_URL}...", flush=True)
         result = os.system(f"git clone {REPO_URL} {PROJECT_FOLDER}")
         if result == 0:
-            print("✓ Repository cloned successfully")
+            print("✓ Repository cloned successfully", flush=True)
         else:
-            print("✗ Failed to clone repository")
+            print("✗ Failed to clone repository", flush=True)
             return
     else:
-        print("✓ Project folder already exists")
+        print("✓ Project folder already exists", flush=True)
 
     # Set file permissions after cloning
     set_permissions()
@@ -194,10 +199,15 @@ def main():
 
     # Start Python proxy server
     port = int(os.getenv("PORT", 5000))
-    print(f"Starting Python proxy server on port {port}...")
-    print(f"Health check available at: http://0.0.0.0:{port}/health")
-    print(f"All other requests proxied to PHP on port {PHP_PORT}")
-    print("=== Server Ready ===\n")
+    print("", flush=True)
+    print("=" * 60, flush=True)
+    print(f"🚀 Python proxy server starting on port {port}", flush=True)
+    print(f"✓ Health check: http://0.0.0.0:{port}/health", flush=True)
+    print(f"✓ Requests proxied to PHP on port {PHP_PORT}", flush=True)
+    print("=" * 60, flush=True)
+    print("=== 🎉 All Services Ready! ===", flush=True)
+    print("=" * 60, flush=True)
+    print("", flush=True)
     
     server = HTTPServer(("0.0.0.0", port), Handler)
     server.serve_forever()
