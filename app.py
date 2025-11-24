@@ -4,6 +4,8 @@ import threading
 import requests
 import time
 import re
+import platform
+import psutil
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ==========================================
@@ -20,6 +22,38 @@ PHP_PORT = 8000
 LOCAL_DB_PORT = 3306
 REPO_URL = "https://github.com/ShovonSheikh/PipraPay.git"
 PROJECT_FOLDER = "project"
+
+def print_system_info():
+    """Print detailed system information"""
+    print("\n" + "=" * 60)
+    print("💻 SYSTEM INFORMATION")
+    print("=" * 60)
+    
+    # Operating System
+    print(f"OS:              {platform.system()} {platform.release()}")
+    print(f"OS Version:      {platform.version()}")
+    print(f"Architecture:    {platform.machine()}")
+    print(f"Processor:       {platform.processor()}")
+    
+    # CPU Information
+    print(f"CPU Cores:       {psutil.cpu_count(logical=False)} physical, {psutil.cpu_count(logical=True)} logical")
+    
+    # Memory Information
+    memory = psutil.virtual_memory()
+    print(f"Total RAM:       {memory.total / (1024**3):.2f} GB")
+    print(f"Available RAM:   {memory.available / (1024**3):.2f} GB")
+    print(f"Used RAM:        {memory.used / (1024**3):.2f} GB ({memory.percent}%)")
+    
+    # Disk Information
+    disk = psutil.disk_usage('/')
+    print(f"Total Disk:      {disk.total / (1024**3):.2f} GB")
+    print(f"Available Disk:  {disk.free / (1024**3):.2f} GB")
+    print(f"Used Disk:       {disk.used / (1024**3):.2f} GB ({disk.percent}%)")
+    
+    # Python Information
+    print(f"Python Version:  {platform.python_version()}")
+    
+    print("=" * 60 + "\n")
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -204,15 +238,15 @@ def main():
     print("=== PipraPay Deployment (Direct TiDB + SSL) ===", flush=True)
     print("=" * 60, flush=True)
     
+    # Print system information first
+    print_system_info()
+    
     # Clone project
     if not os.path.exists(PROJECT_FOLDER):
         print(f"Cloning repository...", flush=True)
         os.system(f"git clone {REPO_URL} {PROJECT_FOLDER}")
     
     set_permissions()
-    
-    # Patch installer to support SSL
-    patch_installer_for_ssl()
     
     # Patch installer to support SSL
     patch_installer_for_ssl()
