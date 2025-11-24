@@ -94,8 +94,11 @@ def start_mysql():
     # Set root password and create database/user
     print("Configuring MySQL database...")
     
+    # First, set root password (no password needed initially after --initialize-insecure)
+    os.system(f"mysql -u root -e \"ALTER USER 'root'@'localhost' IDENTIFIED BY '{root_password}';\"")
+    
+    # Now use the root password for subsequent commands
     commands = [
-        f"ALTER USER 'root'@'localhost' IDENTIFIED BY '{root_password}';",
         f"CREATE DATABASE IF NOT EXISTS {database};",
         f"CREATE USER IF NOT EXISTS '{user}'@'localhost' IDENTIFIED BY '{password}';",
         f"CREATE USER IF NOT EXISTS '{user}'@'%' IDENTIFIED BY '{password}';",
@@ -105,17 +108,23 @@ def start_mysql():
     ]
     
     for cmd in commands:
-        os.system(f'mysql -u root -e "{cmd}"')
+        os.system(f'mysql -u root -p"{root_password}" -e "{cmd}"')
     
     print(f"✓ Database '{database}' created")
     print(f"✓ User '{user}' created with all privileges")
-    print("\nMySQL Connection Details:")
-    print(f"  Host: localhost")
-    print(f"  Port: {MYSQL_PORT}")
-    print(f"  Database: {database}")
-    print(f"  Username: {user}")
-    print(f"  Password: {password}")
-    print(f"  Root Password: {root_password}")
+    print()
+    print("=" * 60)
+    print("🗄️  MYSQL DATABASE CONNECTION DETAILS")
+    print("=" * 60)
+    print(f"Host:          localhost")
+    print(f"Port:          {MYSQL_PORT}")
+    print(f"Database:      {database}")
+    print(f"Username:      {user}")
+    print(f"Password:      {password}")
+    print(f"Root Password: {root_password}")
+    print("=" * 60)
+    print()
+    print("💡 Use these credentials to configure your PipraPay application")
     print()
 
 
