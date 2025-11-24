@@ -5,19 +5,21 @@ import requests
 import time
 import socket
 import ssl
+import select
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ==========================================
 # 🔧 CONFIGURATION (YOUR TIDB DETAILS)
 # ==========================================
 TIDB_HOST = "gateway01.eu-central-1.prod.aws.tidbcloud.com"
-TIDB_PORT = "4000"
+TIDB_PORT = 4000
 TIDB_USER = "467VfcbbnoxchaS.root"
 TIDB_PASSWORD = "U1O54Xyee6M4gR8u"
 DB_NAME = "test"
 # ==========================================
 
 PHP_PORT = 8000
+LOCAL_DB_PORT = 3306
 REPO_URL = "https://github.com/ShovonSheikh/PipraPay.git"
 PROJECT_FOLDER = "project"
 
@@ -68,47 +70,62 @@ def set_permissions():
         if os.path.exists(directory):
             os.system(f"chmod -R 777 {directory}")
 
-def test_tidb_connection():
-    """Directly test if Python can reach TiDB before starting socat"""
-    print(f"\n🔍 Testing Direct Connection to {TIDB_HOST}:{TIDB_PORT}...", flush=True)
+# ==============================================================================
+# 🔌 NATIVE PYTHON SSL PROXY
+# This replaces 'socat'. It listens on 3306, encrypts traffic, and sends to TiDB.
+# ==============================================================================
+def handle_client_connection(client_socket):
+    remote_socket = None
     try:
-        # Create a raw socket
-        sock = socket.create_connection((TIDB_HOST, int(TIDB_PORT)), timeout=5)
+        # 1. Connect to TiDB
+        remote_socket = socket.create_connection((TIDB_HOST, TIDB_PORT), timeout=10)
         
-        # Wrap it in SSL
+        # 2. Wrap connection in SSL (The critical part TiDB needs)
         context = ssl.create_default_context()
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
-        ssock = context.wrap_socket(sock, server_hostname=TIDB_HOST)
-        
-        print("✅ Direct Connection SUCCESS! Network is good.", flush=True)
-        ssock.close()
-        return True
-    except Exception as e:
-        print(f"❌ Direct Connection FAILED: {str(e)}", flush=True)
-        print("   -> Check your Firewall or Credentials.", flush=True)
-        return False
+        # SNI is required by TiDB Cloud
+        remote_socket = context.wrap_socket(remote_socket, server_hostname=TIDB_HOST)
 
-def start_db_proxy():
-    """Start socat with TLS1.2 enforcement"""
-    print(f"=== Starting Database Proxy ===", flush=True)
+        # 3. Pipe data between Local Client (PHP) and Remote Server (TiDB)
+        while True:
+            r, w, x = select.select([client_socket, remote_socket], [], [], 60)
+            if client_socket in r:
+                data = client_socket.recv(4096)
+                if not data: break
+                remote_socket.sendall(data)
+            if remote_socket in r:
+                data = remote_socket.recv(4096)
+                if not data: break
+                client_socket.sendall(data)
+
+    except Exception as e:
+        # Silent fail on disconnects to avoid log spam
+        pass
+    finally:
+        if client_socket: client_socket.close()
+        if remote_socket: remote_socket.close()
+
+def start_python_db_proxy():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     
-    # Updated command:
-    # 1. TCP4-LISTEN: Forces IPv4 (prevents binding issues)
-    # 2. reuseaddr: Allows port reuse if script restarts
-    # 3. method=TLS1.2: Forces the correct encryption protocol for TiDB
-    cmd = [
-        "socat",
-        "-d", "-d", # Verbose logging
-        "TCP4-LISTEN:3306,fork,reuseaddr,bind=127.0.0.1",
-        f"OPENSSL:{TIDB_HOST}:{TIDB_PORT},verify=0,sni={TIDB_HOST},method=TLS1.2"
-    ]
-    
-    print(f"🔗 Creating SSL Tunnel...", flush=True)
-    subprocess.Popen(cmd)
-    
-    time.sleep(2)
-    print("✓ Proxy running on 127.0.0.1:3306", flush=True)
+    try:
+        server.bind(('127.0.0.1', LOCAL_DB_PORT))
+        server.listen(5)
+        print(f"✓ Python SSL Proxy listening on 127.0.0.1:{LOCAL_DB_PORT}", flush=True)
+        
+        while True:
+            client_sock, addr = server.accept()
+            # Handle each connection in a separate thread
+            proxy_thread = threading.Thread(target=handle_client_connection, args=(client_sock,))
+            proxy_thread.daemon = True
+            proxy_thread.start()
+            
+    except Exception as e:
+        print(f"❌ Proxy Error: {e}", flush=True)
+
+# ==============================================================================
 
 def start_php():
     print(f"Starting PHP server on port {PHP_PORT}...", flush=True)
@@ -122,24 +139,20 @@ def start_php():
 
 def main():
     print("=" * 60, flush=True)
-    print("=== PipraPay Deployment (v3 Fix) ===", flush=True)
+    print("=== PipraPay Deployment (Python Native Proxy) ===", flush=True)
     print("=" * 60, flush=True)
     
-    # 1. Test Network First
-    if not test_tidb_connection():
-        print("⚠️ WARNING: TiDB seems unreachable. Proxy might fail.")
-    
-    # 2. Clone project
+    # Clone project
     if not os.path.exists(PROJECT_FOLDER):
         print(f"Cloning repository...", flush=True)
         os.system(f"git clone {REPO_URL} {PROJECT_FOLDER}")
     
     set_permissions()
     
-    # 3. Start the SSL Proxy
-    start_db_proxy()
+    # 1. Start the Python Native Proxy (Background Thread)
+    threading.Thread(target=start_python_db_proxy, daemon=True).start()
     
-    # 4. Start PHP
+    # 2. Start PHP
     threading.Thread(target=start_php, daemon=True).start()
     time.sleep(2)
 
@@ -147,7 +160,7 @@ def main():
     print("📋 INSTALLER CONFIGURATION")
     print("=" * 60)
     print(f"Database Host:     127.0.0.1")
-    print(f"Database Port:     3306")
+    print(f"Database Port:     {LOCAL_DB_PORT}")
     print(f"Database Name:     {DB_NAME}")
     print(f"Database Username: {TIDB_USER}")
     print(f"Database Password: {TIDB_PASSWORD}")
