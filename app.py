@@ -162,91 +162,6 @@ def start_php():
     )
     print(f"✓ PHP server started (PID: {process.pid})", flush=True)
 
-def patch_installer_for_ssl():
-    """
-    Patch the installer to automatically use SSL connections
-    """
-    installer_file = f"{PROJECT_FOLDER}/install/index.php"
-    
-    if not os.path.exists(installer_file):
-        print(f"⚠ Installer not found at {installer_file}", flush=True)
-        return
-    
-    print("Checking if installer needs SSL patch...", flush=True)
-    
-    # Try different encodings to handle various file formats
-    content = None
-    for encoding in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']:
-        try:
-            with open(installer_file, 'r', encoding=encoding) as f:
-                content = f.read()
-            print(f"✓ Successfully read installer with {encoding} encoding", flush=True)
-            break
-        except UnicodeDecodeError:
-            continue
-    
-    if content is None:
-        print("⚠ Could not read installer file with any encoding", flush=True)
-        return
-    
-    # Check if already patched
-    if 'isrgrootx1.pem' in content or 'ssl_set' in content:
-        print("✓ Installer already patched for SSL", flush=True)
-        return
-    
-    # Create a simple patch that wraps mysqli connections
-    patch_code = """
-// TiDB SSL Connection Patch - Auto-injected
-if (!function_exists('tidb_ssl_connect')) {
-    function tidb_ssl_connect($host, $username, $password, $database, $port) {
-        $mysqli = mysqli_init();
-        if (!$mysqli) {
-            die('mysqli_init failed');
-        }
-        $ssl_ca = '/app/isrgrootx1.pem';
-        if (file_exists($ssl_ca)) {
-            $mysqli->ssl_set(NULL, NULL, $ssl_ca, NULL, NULL);
-            $mysqli->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, false);
-            if (!$mysqli->real_connect($host, $username, $password, $database, $port, NULL, MYSQLI_CLIENT_SSL)) {
-                die('Connect Error (' . mysqli_connect_errno() . ') ' . mysqli_connect_error());
-            }
-        } else {
-            if (!$mysqli->real_connect($host, $username, $password, $database, $port)) {
-                die('Connect Error (' . mysqli_connect_errno() . ') ' . mysqli_connect_error());
-            }
-        }
-        return $mysqli;
-    }
-}
-"""
-    
-    # Insert after <?php tag
-    if '<?php' in content:
-        content = content.replace('<?php', '<?php\n' + patch_code, 1)
-        
-        # Replace new mysqli() calls with our function
-        import re
-        content = re.sub(
-            r'new\s+mysqli\s*\(\s*\$([^,]+),\s*\$([^,]+),\s*\$([^,]+),\s*\$([^,]+),\s*\$([^)]+)\s*\)',
-            r'tidb_ssl_connect($\1, $\2, $\3, $\4, $\5)',
-            content
-        )
-        
-        # Backup and save
-        backup_file = installer_file + '.backup'
-        if not os.path.exists(backup_file):
-            # Save backup with the same encoding
-            with open(backup_file, 'w', encoding='utf-8', errors='ignore') as f:
-                f.write(content)
-        
-        # Save patched file
-        with open(installer_file, 'w', encoding='utf-8', errors='ignore') as f:
-            f.write(content)
-        
-        print("✓ Installer patched for SSL connections", flush=True)
-    else:
-        print("⚠ Could not patch installer automatically", flush=True)
-
 def main():
     print("=" * 60, flush=True)
     print("=== PipraPay Deployment (Direct TiDB + SSL) ===", flush=True)
@@ -261,13 +176,6 @@ def main():
         os.system(f"git clone {REPO_URL} {PROJECT_FOLDER}")
     
     set_permissions()
-    
-    # Patch installer to support SSL (only if installer exists)
-    # Note: Installer may not exist initially and will be created during setup
-    if os.path.exists(f"{PROJECT_FOLDER}/install/index.php"):
-        patch_installer_for_ssl()
-    else:
-        print("ℹ Installer not found yet - will be available after first setup", flush=True)
     
     # Start PHP (No proxy needed - direct connection)
     threading.Thread(target=start_php, daemon=True).start()
