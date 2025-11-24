@@ -65,10 +65,16 @@ RUN if [ -d "project" ]; then \
     if [ -d "project/pp-include" ]; then chmod -R 777 project/pp-include; fi; \
     fi
 
-# Create MySQL data directory
+# Create MySQL data directory and socket directory
 RUN mkdir -p /var/run/mysqld && \
+    mkdir -p /var/lib/mysql && \
     chown -R mysql:mysql /var/run/mysqld && \
+    chown -R mysql:mysql /var/lib/mysql && \
     chmod 777 /var/run/mysqld
+
+# Configure PHP to use the correct MySQL socket
+RUN echo "mysqli.default_socket = /var/run/mysqld/mysqld.sock" >> /usr/local/etc/php/conf.d/mysqli.ini && \
+    echo "pdo_mysql.default_socket = /var/run/mysqld/mysqld.sock" >> /usr/local/etc/php/conf.d/pdo_mysql.ini
 
 # Expose ports
 EXPOSE 80 8000 3306
