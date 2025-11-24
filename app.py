@@ -174,8 +174,20 @@ def patch_installer_for_ssl():
     
     print("Checking if installer needs SSL patch...", flush=True)
     
-    with open(installer_file, 'r') as f:
-        content = f.read()
+    # Try different encodings to handle various file formats
+    content = None
+    for encoding in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']:
+        try:
+            with open(installer_file, 'r', encoding=encoding) as f:
+                content = f.read()
+            print(f"✓ Successfully read installer with {encoding} encoding", flush=True)
+            break
+        except UnicodeDecodeError:
+            continue
+    
+    if content is None:
+        print("⚠ Could not read installer file with any encoding", flush=True)
+        return
     
     # Check if already patched
     if 'isrgrootx1.pem' in content or 'ssl_set' in content:
@@ -223,10 +235,12 @@ if (!function_exists('tidb_ssl_connect')) {
         # Backup and save
         backup_file = installer_file + '.backup'
         if not os.path.exists(backup_file):
-            with open(backup_file, 'w') as f:
+            # Save backup with the same encoding
+            with open(backup_file, 'w', encoding='utf-8', errors='ignore') as f:
                 f.write(content)
         
-        with open(installer_file, 'w') as f:
+        # Save patched file
+        with open(installer_file, 'w', encoding='utf-8', errors='ignore') as f:
             f.write(content)
         
         print("✓ Installer patched for SSL connections", flush=True)
@@ -248,8 +262,12 @@ def main():
     
     set_permissions()
     
-    # Patch installer to support SSL
-    patch_installer_for_ssl()
+    # Patch installer to support SSL (only if installer exists)
+    # Note: Installer may not exist initially and will be created during setup
+    if os.path.exists(f"{PROJECT_FOLDER}/install/index.php"):
+        patch_installer_for_ssl()
+    else:
+        print("ℹ Installer not found yet - will be available after first setup", flush=True)
     
     # Start PHP (No proxy needed - direct connection)
     threading.Thread(target=start_php, daemon=True).start()
