@@ -79,7 +79,7 @@ def start_php():
     env["DB_USER"] = DB_USER
     env["DB_PASS"] = DB_PASSWORD
     env["DB_NAME"] = DB_NAME
-    env["DB_SSL_CA"] = "/app/ca.pem"  # Path to the cert inside Docker
+    env["DB_SSL_CA"] = "/app/isrgrootx1.pem"  # Path to the cert inside Docker
 
     process = subprocess.Popen(
         ["php", "-S", f"0.0.0.0:{PHP_PORT}"],
