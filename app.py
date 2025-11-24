@@ -6,6 +6,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PHP_PORT = 8000
+MYSQL_PORT = 3306
 REPO_URL = "https://github.com/ShovonSheikh/PipraPay.git"
 PROJECT_FOLDER = "project"
 
@@ -52,6 +53,72 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(str(e).encode())
 
 
+def start_mysql():
+    """Initialize and start MySQL server"""
+    print("=== Starting MySQL Database ===")
+    
+    # Get environment variables
+    root_password = os.getenv("MYSQL_ROOT_PASSWORD", "R00t@Pipra2024!Secure#DB")
+    database = os.getenv("MYSQL_DATABASE", "piprapay")
+    user = os.getenv("MYSQL_USER", "piprapay_user")
+    password = os.getenv("MYSQL_PASSWORD", "Pipra@Pay2024!Str0ng#Pass")
+    
+    # Initialize MySQL data directory if not exists
+    if not os.path.exists("/var/lib/mysql/mysql"):
+        print("Initializing MySQL data directory...")
+        os.system("mysqld --initialize-insecure --user=mysql --datadir=/var/lib/mysql")
+        print("✓ MySQL initialized")
+    
+    # Start MySQL server in background
+    print(f"Starting MySQL server on port {MYSQL_PORT}...")
+    mysql_process = subprocess.Popen(
+        ["mysqld", "--user=mysql", "--datadir=/var/lib/mysql"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    print(f"✓ MySQL server started (PID: {mysql_process.pid})")
+    
+    # Wait for MySQL to be ready
+    print("Waiting for MySQL to be ready...")
+    max_attempts = 30
+    for i in range(max_attempts):
+        result = os.system("mysqladmin ping -h localhost --silent")
+        if result == 0:
+            print("✓ MySQL is ready!")
+            break
+        time.sleep(1)
+        if i == max_attempts - 1:
+            print("✗ MySQL failed to start properly")
+            return
+    
+    # Set root password and create database/user
+    print("Configuring MySQL database...")
+    
+    commands = [
+        f"ALTER USER 'root'@'localhost' IDENTIFIED BY '{root_password}';",
+        f"CREATE DATABASE IF NOT EXISTS {database};",
+        f"CREATE USER IF NOT EXISTS '{user}'@'localhost' IDENTIFIED BY '{password}';",
+        f"CREATE USER IF NOT EXISTS '{user}'@'%' IDENTIFIED BY '{password}';",
+        f"GRANT ALL PRIVILEGES ON {database}.* TO '{user}'@'localhost';",
+        f"GRANT ALL PRIVILEGES ON {database}.* TO '{user}'@'%';",
+        f"FLUSH PRIVILEGES;"
+    ]
+    
+    for cmd in commands:
+        os.system(f'mysql -u root -e "{cmd}"')
+    
+    print(f"✓ Database '{database}' created")
+    print(f"✓ User '{user}' created with all privileges")
+    print("\nMySQL Connection Details:")
+    print(f"  Host: localhost")
+    print(f"  Port: {MYSQL_PORT}")
+    print(f"  Database: {database}")
+    print(f"  Username: {user}")
+    print(f"  Password: {password}")
+    print(f"  Root Password: {root_password}")
+    print()
+
+
 def set_permissions():
     """Set proper file permissions for PipraPay directories"""
     print("Setting file permissions...")
@@ -88,6 +155,9 @@ def start_php():
 
 def main():
     print("=== PipraPay Deployment Starting ===")
+    
+    # Start MySQL first
+    start_mysql()
     
     # Clone project if not exists
     if not os.path.exists(PROJECT_FOLDER):
