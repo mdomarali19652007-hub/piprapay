@@ -1,7 +1,7 @@
 # Use PHP 8.1 CLI as base
 FROM php:8.1-cli
 
-# Install system dependencies
+# Install system dependencies including MySQL server
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-venv \
@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     libxml2-dev \
     libmagickwand-dev \
+    default-mysql-server \
+    default-mysql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions required by PipraPay
@@ -63,11 +65,22 @@ RUN if [ -d "project" ]; then \
     if [ -d "project/pp-include" ]; then chmod -R 777 project/pp-include; fi; \
     fi
 
+# Create MySQL data directory
+RUN mkdir -p /var/run/mysqld && \
+    chown -R mysql:mysql /var/run/mysqld && \
+    chmod 777 /var/run/mysqld
+
 # Expose ports
-EXPOSE 80 8000
+EXPOSE 80 8000 3306
 
 # Set PATH to use venv
 ENV PATH="/app/venv/bin:$PATH"
+
+# Set MySQL environment variables (can be overridden)
+ENV MYSQL_ROOT_PASSWORD=R00t@Pipra2024!Secure#DB
+ENV MYSQL_DATABASE=piprapay
+ENV MYSQL_USER=piprapay_user
+ENV MYSQL_PASSWORD=Pipra@Pay2024!Str0ng#Pass
 
 # Run Python app
 CMD ["python3", "app.py"]
