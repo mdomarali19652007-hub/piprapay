@@ -1,7 +1,7 @@
 # Use PHP 8.1 CLI as base
 FROM php:8.1-cli
 
-# Install system dependencies including socat
+# Install system dependencies including socat and ca-certificates
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-venv \
@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     unzip \
     socat \
+    ca-certificates \
     libzip-dev \
     libpng-dev \
     libjpeg-dev \
@@ -20,6 +21,9 @@ RUN apt-get update && apt-get install -y \
     libmagickwand-dev \
     default-mysql-client \
     && rm -rf /var/lib/apt/lists/*
+
+# Update CA certificates
+RUN update-ca-certificates
 
 # Install PHP extensions required by PipraPay
 RUN docker-php-ext-install \
@@ -50,7 +54,7 @@ WORKDIR /app
 # Copy project files
 COPY . /app
 
-# Copy the TiDB Certificate
+# Copy the TiDB Certificate (as backup option)
 COPY isrgrootx1.pem /app/isrgrootx1.pem
 
 # Create Python virtual environment
