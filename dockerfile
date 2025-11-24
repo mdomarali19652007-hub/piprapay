@@ -1,9 +1,7 @@
 # Use PHP 8.1 CLI as base
 FROM php:8.1-cli
 
-# Install system dependencies
-# We removed 'default-mysql-server' because you are using Remote TiDB
-# We kept 'default-mysql-client' in case you need to debug connections
+# Install system dependencies including socat
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-venv \
@@ -12,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     unzip \
+    socat \
     libzip-dev \
     libpng-dev \
     libjpeg-dev \
@@ -36,7 +35,7 @@ RUN docker-php-ext-install \
 RUN pecl install imagick && \
     docker-php-ext-enable imagick
 
-# Install IonCube Loader for PHP 8.1
+# Install IonCube Loader
 RUN cd /tmp && \
     curl -fsSL -o ioncube.tar.gz https://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_x86-64.tar.gz && \
     tar -xzf ioncube.tar.gz && \
@@ -51,9 +50,8 @@ WORKDIR /app
 # Copy project files
 COPY . /app
 
-# --- NEW: Copy the TiDB Certificate ---
+# Copy the TiDB Certificate
 COPY isrgrootx1.pem /app/isrgrootx1.pem
-# --------------------------------------
 
 # Create Python virtual environment
 RUN python3 -m venv /app/venv
@@ -61,7 +59,7 @@ RUN python3 -m venv /app/venv
 # Install Python dependencies
 RUN /app/venv/bin/pip install --no-cache-dir -r requirements.txt
 
-# Set proper file permissions for PipraPay folders
+# Set permissions
 RUN if [ -d "project" ]; then \
     chmod -R 755 project && \
     if [ -d "project/invoice" ]; then chmod -R 777 project/invoice; fi && \
@@ -70,10 +68,10 @@ RUN if [ -d "project" ]; then \
     if [ -d "project/pp-include" ]; then chmod -R 777 project/pp-include; fi; \
     fi
 
-# Expose ports (PHP and Python Proxy only)
+# Expose ports
 EXPOSE 8000 5000
 
-# Set PATH to use venv
+# Set PATH
 ENV PATH="/app/venv/bin:$PATH"
 
 # Run Python app
