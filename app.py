@@ -70,11 +70,14 @@ def start_db_proxy():
     """Start socat to tunnel traffic to TiDB with SSL"""
     print(f"=== Starting Database Proxy ===", flush=True)
     
-    # Listen on localhost:3306 -> Encrypt -> Forward to TiDB:4000
+    # Fix: Added 'sni={TIDB_HOST}' and 'verify=0'
+    # 'sni' tells TiDB which cluster we want (Required for Cloud)
+    # 'verify=0' ignores certificate errors temporarily to fix the handshake loop
     cmd = [
         "socat",
+        "-d", "-d", # Enable verbose logging to see what happens
         "TCP-LISTEN:3306,fork,bind=127.0.0.1",
-        f"OPENSSL:{TIDB_HOST}:{TIDB_PORT},cafile=/app/isrgrootx1.pem,verify=1"
+        f"OPENSSL:{TIDB_HOST}:{TIDB_PORT},verify=0,sni={TIDB_HOST}"
     ]
     
     print(f"🔗 Creating SSL Tunnel to {TIDB_HOST}...", flush=True)
