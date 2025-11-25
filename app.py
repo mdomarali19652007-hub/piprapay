@@ -18,8 +18,7 @@ TIDB_PASSWORD = "U1O54Xyee6M4gR8u"
 DB_NAME = "test"
 # ==========================================
 
-PHP_PORT = 8000
-LOCAL_DB_PORT = 3306
+PHP_PORT = 8001  # PHP runs on internal port 8001
 REPO_URL = "https://github.com/ShovonSheikh/PipraPay.git"
 PROJECT_FOLDER = "project"
 
@@ -153,10 +152,10 @@ def start_socat_proxy():
 # ==============================================================================
 
 def start_php():
-    print(f"Starting PHP server on port {PHP_PORT}...", flush=True)
+    print(f"Starting PHP server on internal port {PHP_PORT}...", flush=True)
     os.chdir(PROJECT_FOLDER)
     process = subprocess.Popen(
-        ["php", "-S", f"0.0.0.0:{PHP_PORT}"],
+        ["php", "-S", f"127.0.0.1:{PHP_PORT}"],  # Listen only on localhost
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
@@ -201,8 +200,12 @@ def main():
     print(f"   - Verify Server Cert: NO (recommended)")
     print("=" * 60 + "\n")
 
-    port = int(os.getenv("PORT", 5000))
-    print(f"🚀 Proxy server running on port {port}")
+    # Get the external port from environment (Koyeb/Render provides this)
+    port = int(os.getenv("PORT", 8000))
+    print(f"🚀 Starting proxy server on 0.0.0.0:{port}")
+    print(f"   Forwarding requests to PHP on 127.0.0.1:{PHP_PORT}")
+    print(f"   Public URL will be available on port {port}\n")
+    
     server = HTTPServer(("0.0.0.0", port), Handler)
     server.serve_forever()
 
