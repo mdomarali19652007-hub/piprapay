@@ -101,6 +101,92 @@ def set_permissions():
         if os.path.exists(directory):
             os.system(f"chmod -R 777 {directory}")
 
+def create_php_ssl_config():
+    """
+    Create a PHP auto_prepend_file that forces SSL connections for all MySQLi operations
+    """
+    print("Creating PHP SSL configuration...", flush=True)
+    
+    ssl_config_content = """<?php
+// TiDB SSL Connection - Auto-prepend configuration
+// This file is automatically loaded before any PHP script
+
+// Override mysqli_connect to always use SSL
+if (!function_exists('tidb_mysqli_real_connect')) {
+    function tidb_mysqli_real_connect($mysqli, $host, $username, $passwd, $dbname, $port = null, $socket = null, $flags = 0) {
+        // Set SSL options before connecting
+        $ssl_ca_options = [
+            '/etc/ssl/certs/ca-certificates.crt',
+            '/app/ca-certificates.crt',
+            '/app/isrgrootx1.pem'
+        ];
+        
+        $ssl_ca = null;
+        foreach ($ssl_ca_options as $ca_path) {
+            if (file_exists($ca_path)) {
+                $ssl_ca = $ca_path;
+                break;
+            }
+        }
+        
+        if ($ssl_ca) {
+            $mysqli->ssl_set(NULL, NULL, $ssl_ca, NULL, NULL);
+            $mysqli->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, false);
+        }
+        
+        // Force SSL flag
+        $flags = $flags | MYSQLI_CLIENT_SSL;
+        
+        return $mysqli->real_connect($host, $username, $passwd, $dbname, $port, $socket, $flags);
+    }
+}
+
+// Hook into mysqli::__construct
+class TiDB_MySQLi extends mysqli {
+    public function __construct($host = null, $username = null, $passwd = null, $dbname = null, $port = null, $socket = null) {
+        parent::init();
+        
+        if ($host !== null) {
+            $ssl_ca_options = [
+                '/etc/ssl/certs/ca-certificates.crt',
+                '/app/ca-certificates.crt',
+                '/app/isrgrootx1.pem'
+            ];
+            
+            $ssl_ca = null;
+            foreach ($ssl_ca_options as $ca_path) {
+                if (file_exists($ca_path)) {
+                    $ssl_ca = $ca_path;
+                    break;
+                }
+            }
+            
+            if ($ssl_ca) {
+                $this->ssl_set(NULL, NULL, $ssl_ca, NULL, NULL);
+                $this->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, false);
+            }
+            
+            $this->real_connect($host, $username, $passwd, $dbname, $port, $socket, MYSQLI_CLIENT_SSL);
+        }
+    }
+}
+
+// Replace the mysqli class globally
+if (!class_exists('Original_MySQLi')) {
+    class_alias('mysqli', 'Original_MySQLi');
+    class_alias('TiDB_MySQLi', 'mysqli');
+}
+?>"""
+    
+    ssl_config_file = f"{PROJECT_FOLDER}/tidb_ssl_prepend.php"
+    
+    with open(ssl_config_file, 'w') as f:
+        f.write(ssl_config_content)
+    
+    print(f"✓ Created SSL configuration at {ssl_config_file}", flush=True)
+    
+    return ssl_config_file
+
 # ==============================================================================
 # 🔌 SOCAT SSL PROXY (Properly handles MySQL protocol + SSL)
 # ==============================================================================
@@ -153,13 +239,23 @@ def start_socat_proxy():
 
 def start_php():
     print(f"Starting PHP server on internal port {PHP_PORT}...", flush=True)
+    
+    # Create PHP SSL configuration first
+    ssl_config_file = create_php_ssl_config()
+    
     os.chdir(PROJECT_FOLDER)
+    
+    # Start PHP with auto_prepend_file to inject SSL configuration
     process = subprocess.Popen(
-        ["php", "-S", f"127.0.0.1:{PHP_PORT}"],  # Listen only on localhost
+        [
+            "php",
+            "-S", f"127.0.0.1:{PHP_PORT}",
+            "-d", f"auto_prepend_file={ssl_config_file}"
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    print(f"✓ PHP server started (PID: {process.pid})", flush=True)
+    print(f"✓ PHP server started with SSL support (PID: {process.pid})", flush=True)
 
 def main():
     print("=" * 60, flush=True)
