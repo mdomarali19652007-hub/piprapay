@@ -197,8 +197,7 @@ def main():
     
     set_permissions()
     
-    # Patch ALL PHP files for SSL support
-    patch_php_files_for_ssl()
+
     
     # Start PHP
     threading.Thread(target=start_php, daemon=True).start()
