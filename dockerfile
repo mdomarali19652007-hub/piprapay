@@ -54,8 +54,8 @@ WORKDIR /app
 # Copy project files
 COPY . /app
 
-# Copy the TiDB Certificate (as backup option)
-COPY isrgrootx1.pem /app/isrgrootx1.pem
+# Copy the TiDB Certificate is not needed - using system CA bundle
+# The ISRG Root X1 cert is already in /etc/ssl/certs/ca-certificates.crt
 
 # Create Python virtual environment
 RUN python3 -m venv /app/venv
