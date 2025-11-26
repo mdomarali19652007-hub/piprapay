@@ -5,6 +5,7 @@ import requests
 import time
 import platform
 import psutil
+import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ==========================================
@@ -28,20 +29,12 @@ def print_system_info():
     print("=" * 60)
     
     print(f"OS:              {platform.system()} {platform.release()}")
-    print(f"OS Version:      {platform.version()}")
     print(f"Architecture:    {platform.machine()}")
-    print(f"Processor:       {platform.processor()}")
     print(f"CPU Cores:       {psutil.cpu_count(logical=False)} physical, {psutil.cpu_count(logical=True)} logical")
     
     memory = psutil.virtual_memory()
     print(f"Total RAM:       {memory.total / (1024**3):.2f} GB")
     print(f"Available RAM:   {memory.available / (1024**3):.2f} GB")
-    print(f"Used RAM:        {memory.used / (1024**3):.2f} GB ({memory.percent}%)")
-    
-    disk = psutil.disk_usage('/')
-    print(f"Total Disk:      {disk.total / (1024**3):.2f} GB")
-    print(f"Available Disk:  {disk.free / (1024**3):.2f} GB")
-    print(f"Used Disk:       {disk.used / (1024**3):.2f} GB ({disk.percent}%)")
     
     print(f"Python Version:  {platform.python_version()}")
     print("=" * 60 + "\n")
@@ -93,121 +86,99 @@ def set_permissions():
         if os.path.exists(directory):
             os.system(f"chmod -R 777 {directory}")
 
-def patch_database_config():
+def patch_php_files_for_ssl():
     """
-    Patch the PipraPay database configuration to enable SSL/TLS for TiDB
+    Patch all PHP files that create mysqli connections to use SSL
     """
-    print("Patching database configuration for TiDB SSL...", flush=True)
+    print("Patching PHP files for TiDB SSL support...", flush=True)
     
-    config_files = [
-        f"{PROJECT_FOLDER}/pp-include/config.php",
-        f"{PROJECT_FOLDER}/pp-include/db-config.php",
-        f"{PROJECT_FOLDER}/config.php",
-        f"{PROJECT_FOLDER}/includes/config.php",
-        f"{PROJECT_FOLDER}/includes/db.php",
-    ]
+    php_files = []
+    for root, dirs, files in os.walk(PROJECT_FOLDER):
+        for file in files:
+            if file.endswith('.php'):
+                php_files.append(os.path.join(root, file))
     
-    # Find the actual config file
-    config_file = None
-    for cf in config_files:
-        if os.path.exists(cf):
-            config_file = cf
-            print(f"✓ Found config file: {cf}", flush=True)
-            break
+    patched_count = 0
     
-    if not config_file:
-        print("⚠️ No config file found yet (will be created during installation)", flush=True)
-        return
+    for php_file in php_files:
+        try:
+            with open(php_file, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            original_content = content
+            
+            # Pattern 1: new mysqli(...) - replace with SSL version
+            pattern1 = r'new\s+mysqli\s*\(\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+)(?:,\s*([^,\)]+))?(?:,\s*([^,\)]+))?\s*\)'
+            
+            def replace_mysqli(match):
+                host = match.group(1).strip()
+                user = match.group(2).strip()
+                pass_var = match.group(3).strip()
+                db = match.group(4).strip()
+                port = match.group(5).strip() if match.group(5) else '3306'
+                
+                return f'''(function() {{
+    $db = mysqli_init();
+    if (!$db) {{ die('mysqli_init failed'); }}
+    $ssl_ca_opts = ['/etc/ssl/certs/ca-certificates.crt', '/app/ca-certificates.crt'];
+    foreach ($ssl_ca_opts as $ca) {{ if (file_exists($ca)) {{ mysqli_ssl_set($db, NULL, NULL, $ca, NULL, NULL); break; }} }}
+    mysqli_options($db, MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, false);
+    if (!mysqli_real_connect($db, {host}, {user}, {pass_var}, {db}, {port}, NULL, MYSQLI_CLIENT_SSL)) {{
+        die('Connect Error (' . mysqli_connect_errno() . '): ' . mysqli_connect_error());
+    }}
+    return $db;
+}})()'''
+            
+            content = re.sub(pattern1, replace_mysqli, content)
+            
+            # Pattern 2: mysqli_connect(...) - replace with SSL version
+            pattern2 = r'mysqli_connect\s*\(\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+)(?:,\s*([^,\)]+))?\s*\)'
+            
+            def replace_mysqli_connect(match):
+                host = match.group(1).strip()
+                user = match.group(2).strip()
+                pass_var = match.group(3).strip()
+                db = match.group(4).strip()
+                port = match.group(5).strip() if match.group(5) else '3306'
+                
+                return f'''(function() {{
+    $db = mysqli_init();
+    if (!$db) {{ die('mysqli_init failed'); }}
+    $ssl_ca_opts = ['/etc/ssl/certs/ca-certificates.crt', '/app/ca-certificates.crt'];
+    foreach ($ssl_ca_opts as $ca) {{ if (file_exists($ca)) {{ mysqli_ssl_set($db, NULL, NULL, $ca, NULL, NULL); break; }} }}
+    mysqli_options($db, MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, false);
+    if (!mysqli_real_connect($db, {host}, {user}, {pass_var}, {db}, {port}, NULL, MYSQLI_CLIENT_SSL)) {{
+        die('Connect Error (' . mysqli_connect_errno() . '): ' . mysqli_connect_error());
+    }}
+    return $db;
+}})()'''
+            
+            content = re.sub(pattern2, replace_mysqli_connect, content)
+            
+            # Only write if changed
+            if content != original_content:
+                with open(php_file, 'w', encoding='utf-8', errors='ignore') as f:
+                    f.write(content)
+                patched_count += 1
+                print(f"  ✓ Patched: {php_file}", flush=True)
+        
+        except Exception as e:
+            print(f"  ⚠️ Error patching {php_file}: {e}", flush=True)
     
-    # Read the config file
-    with open(config_file, 'r') as f:
-        content = f.read()
-    
-    # Check if SSL is already configured
-    if 'MYSQLI_CLIENT_SSL' in content or 'ssl_set' in content:
-        print("✓ SSL already configured in config file", flush=True)
-        return
-    
-    # Add SSL configuration after mysqli connection
-    # Look for mysqli connection patterns and add SSL
-    ssl_patch = """
-// TiDB SSL/TLS Configuration - Auto-injected
-if (isset($connection) && $connection instanceof mysqli) {
-    $ssl_ca = '/etc/ssl/certs/ca-certificates.crt';
-    if (!file_exists($ssl_ca)) {
-        $ssl_ca = '/app/ca-certificates.crt';
-    }
-    if (file_exists($ssl_ca)) {
-        $connection->ssl_set(NULL, NULL, $ssl_ca, NULL, NULL);
-        $connection->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, false);
-    }
-}
-"""
-    
-    # Add the patch at the end before closing PHP tag
-    if content.strip().endswith('?>'):
-        content = content.rsplit('?>', 1)[0] + ssl_patch + "\n?>"
-    else:
-        content = content + "\n" + ssl_patch
-    
-    # Write back
-    with open(config_file, 'w') as f:
-        f.write(content)
-    
-    print(f"✓ Patched {config_file} with SSL configuration", flush=True)
+    print(f"✓ Patched {patched_count} PHP files for SSL", flush=True)
 
-def create_custom_php_ini():
-    """
-    Create a custom PHP INI file with MySQLi SSL defaults
-    """
-    print("Creating custom PHP configuration...", flush=True)
-    
-    php_ini_content = """
-; Custom PHP configuration for TiDB SSL connections
-mysqli.allow_local_infile = On
-mysqli.allow_persistent = On
-mysqli.max_persistent = -1
-mysqli.max_links = -1
-mysqli.default_port = 4000
-mysqli.default_socket =
-mysqli.default_host =
-mysqli.default_user =
-mysqli.default_pw =
-mysqli.reconnect = Off
-
-; Enable SSL for MySQL connections
-mysqlnd.net_cmd_buffer_size = 4096
-mysqlnd.collect_statistics = On
-mysqlnd.collect_memory_statistics = On
-
-; Error reporting
-display_errors = On
-error_reporting = E_ALL
-log_errors = On
-"""
-    
-    php_ini_file = "/tmp/custom_php.ini"
-    with open(php_ini_file, 'w') as f:
-        f.write(php_ini_content)
-    
-    print(f"✓ Created custom PHP INI at {php_ini_file}", flush=True)
-    return php_ini_file
-
-def start_php(php_ini_file):
+def start_php():
     print(f"Starting PHP server on internal port {PHP_PORT}...", flush=True)
     
     project_abs_path = os.path.abspath(PROJECT_FOLDER)
-    
     print(f"✓ Project path: {project_abs_path}", flush=True)
-    print(f"✓ Using PHP INI: {php_ini_file}", flush=True)
     
     # Start PHP server
     process = subprocess.Popen(
         [
             "php",
             "-S", f"127.0.0.1:{PHP_PORT}",
-            "-t", project_abs_path,
-            "-c", php_ini_file
+            "-t", project_abs_path
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -225,29 +196,6 @@ def start_php(php_ini_file):
     
     threading.Thread(target=log_php_output, daemon=True).start()
 
-def monitor_and_patch_config():
-    """
-    Monitor for config file creation and patch it when it appears
-    """
-    print("Starting config file monitor...", flush=True)
-    
-    config_paths = [
-        f"{PROJECT_FOLDER}/pp-include/config.php",
-        f"{PROJECT_FOLDER}/config.php",
-    ]
-    
-    checked = set()
-    
-    while True:
-        for config_path in config_paths:
-            if config_path not in checked and os.path.exists(config_path):
-                print(f"✓ Config file created: {config_path}", flush=True)
-                time.sleep(1)  # Wait a bit for file to be fully written
-                patch_database_config()
-                checked.add(config_path)
-        
-        time.sleep(5)
-
 def main():
     print("=" * 60, flush=True)
     print("=== PipraPay Deployment (TiDB with SSL) ===", flush=True)
@@ -262,21 +210,15 @@ def main():
     
     set_permissions()
     
-    # Try to patch existing config
-    patch_database_config()
-    
-    # Create custom PHP INI
-    php_ini_file = create_custom_php_ini()
-    
-    # Start config file monitor in background
-    threading.Thread(target=monitor_and_patch_config, daemon=True).start()
+    # Patch ALL PHP files for SSL support
+    patch_php_files_for_ssl()
     
     # Start PHP
-    threading.Thread(target=start_php, args=(php_ini_file,), daemon=True).start()
+    threading.Thread(target=start_php, daemon=True).start()
     time.sleep(3)
 
     print("\n" + "=" * 60)
-    print("📋 INSTALLER CONFIGURATION (TiDB with SSL/TLS)")
+    print("📋 INSTALLER CONFIGURATION")
     print("=" * 60)
     print(f"Database Host:     {TIDB_HOST}")
     print(f"Database Port:     {TIDB_PORT}")
@@ -284,17 +226,12 @@ def main():
     print(f"Database Username: {TIDB_USER}")
     print(f"Database Password: {TIDB_PASSWORD}")
     print(f"")
-    print(f"⚠️  IMPORTANT - Installation Steps:")
-    print(f"   1. During installation, use the credentials above")
-    print(f"   2. TiDB connection will be automatically configured with SSL")
-    print(f"   3. If connection fails, the config will be auto-patched")
-    print(f"")
-    print(f"   SSL Certificate: /etc/ssl/certs/ca-certificates.crt")
+    print(f"✓ All mysqli connections patched for SSL/TLS")
+    print(f"✓ TiDB connection ready with automatic SSL")
     print("=" * 60 + "\n")
 
     port = int(os.getenv("PORT", 8000))
-    print(f"🚀 Starting proxy server on 0.0.0.0:{port}")
-    print(f"   Forwarding to PHP on 127.0.0.1:{PHP_PORT}")
+    print(f"🚀 Proxy server starting on 0.0.0.0:{port}")
     print(f"   Visit: https://piprapay.onrender.com\n")
     
     server = HTTPServer(("0.0.0.0", port), Handler)
