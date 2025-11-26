@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     libmagickwand-dev \
     default-mysql-client \
+    mariadb-server \
+    
     && rm -rf /var/lib/apt/lists/*
 
 # Update CA certificates
@@ -54,8 +56,7 @@ WORKDIR /app
 # Copy project files
 COPY . /app
 
-# Copy the TiDB Certificate is not needed - using system CA bundle
-# The ISRG Root X1 cert is already in /etc/ssl/certs/ca-certificates.crt
+
 
 # Create Python virtual environment
 RUN python3 -m venv /app/venv
